@@ -1,0 +1,2 @@
+launchpad-py==0.9.1
+pygame==2.4.0
