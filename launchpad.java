@@ -32,9 +32,10 @@ public class launchpad {
         launch = table.getTable("launchpad");
         defaultLEDs();
         for (int i=0; i < 2; i++) {
+            hidController = new CommandGenericHID(i+1);
             for (int j=0; j < 4; j++) {
                 for (int k=0; k < 7; k++) {
-                    buttons[j+i*4][k] = new CommandGenericHID(i+1).button((k+1)+(j*8));
+                    buttons[j+i*4][k] = hidController.button((k+1)+(j*8));
                 }
             }
         }
