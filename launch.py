@@ -1,105 +1,141 @@
+import math
 import time
 import ntcore
 import launchpad_py as launchpad
+from launchpad_py import LaunchpadMiniMk3
+from ntcore import NetworkTableInstance
 from pygame import time
 from pyvjoystick import vjoy
+from pyvjoystick.vjoy import VJoyDevice
+
+
+class LaunchpadMini3Controller:
+    lp: LaunchpadMiniMk3 = None
+    hid0: VJoyDevice = None
+    hid1: VJoyDevice = None
+    teamnumber: int = None
+    networkTables: NetworkTableInstance = None
+    launchpadTable: ntcore._ntcore.NetworkTable = None
+    buttons = None # type: dict[int, dict[int, ntcore._ntcore.IntegerArraySubscriber]]
+    buttonStates: list[list[bool | 8] | 8] = [([False] for i in range(8)) for k in range(8)]
+    stop: bool = False
+
+    def __init__(self, ntTable: str):
+        self.printWarning()
+
+        if launchpad.LaunchpadMiniMk3().Check(1):
+            lp = launchpad.LaunchpadMiniMk3()
+            if lp.Open(1, "minimk3"):
+                self.startupLeds()
+
+                while True:
+                    try:
+                        self.teamnumber = int(input("Please enter your team number: "))
+                        break
+                    except:
+                        print("Not a valid teamnumber, please input again\n")
+
+                hid0 = vjoy.VJoyDevice(1)
+                hid1 = vjoy.VJoyDevice(2)
+
+                print("Launchpad Mini Mk3")
+
+                self.setupNetworkTableClient(ntTable)
+        else:
+            raise Exception("Launchpad Attached is not an Mk3 or is not connected.")
+
+
+    def setupNetworkTableClient(self, launchpadNTKey: str):
+        self.networkTables = ntcore.NetworkTableInstance.getDefault()
+        self.networkTables.startClient4("launchpad")
+        self.networkTables.setServerTeam(self.teamnumber)
+        self.networkTables.setServer("localhost") # Sim only
+        self.networkTables.startDSClient()
+        self.launchpadTable = self.networkTables.getTable(launchpadNTKey)
+        self.buttons = {row: {column: self.launchpadTable.getSubTable(str(row))
+                              .getIntegerArrayTopic(str(column))
+                              .subscribe([0, 0, 0]) for column in range(0,8)} for row in range(0,8)}
+
+
+    def updateLeds(self):
+        if self.networkTables.isConnected():
+            for i, v in self.buttons.items():
+                for j, l in v.items():
+                    for k in l.readQueue():
+                        self.setLed(i, j, k.value[0], k.value[1], k.value[2])
+
+
+    def updateButtonStates(self):
+        XYState = self.lp.ButtonStateXY()
+        while XYState != []:
+            if XYState[2] > 0:
+                print(f"({XYState[0]},{XYState[1]-1}) is {"pressed" if [XYState[2]] != 0 else "not pressed"}.")
+                self.buttonStates[XYState[0]][XYState[1]-1] = (XYState[2] != 0)
+                XYState = self.lp.ButtonStateXY()
+            elif XYState[1] == 7 and XYState[2] == 0:
+                self.stop = True
+
+
+    def updateHidStates(self):
+        for row in range(self.buttonStates):
+            for col in range(row):
+                if row < 4:
+                    self.hid0.set_button((1+col+row*7), self.buttonStates[row][col])
+                else:
+                    self.hid1.set_button((1+col+(row-4)*7), self.buttonStates[row][col])
+
+
+    def startupLeds(self):
+        self.lp.LedAllOn(5)
+        self.lp.LedCtrlString(f"{self.teamnumber}", 0, 0, 63, -1, waitms=0)
+        self.lp.LedAllOn(0)
+
+
+    def setLed(self, x, y, red, green, blue):
+        self.lp.LedCtrlXY(x, y+1, red, green, blue)
+
+
+    def printWarning(self):
+        print("\nCurrently this program only works with the Novation Launchpad Mk3 Mini")
+        print(
+            "0,0 is defined as the top left of the launchpad whitespace(ONLY THE WHITESPACE IS USED), +y is down and +x is to the right from the top left white space")
+        print(
+            "If you want any LED pattern set by default do it with the associated Java library")
+        print("Stop button will be the on the top-most button row, and to the right, should be just left of the corner")
+        print("PLEASE MAKE SURE YOUR VJOY CONFIG IS CORRECT")
+        print("It needs to be 2 vJoy devices, with no enabled Axes, no Force Feedback, 0 POVs, and 32 buttons")
+        print("Please confirm that vJoy device 1 is on driverstation usb order 1, and same with 2")
+        print("Make sure this is run on the same computer as the driver station for NT and HID reasons")
+        print("PLEASE USE THE ASSOCIATED JAVA CLASS FOR INTERACTION\n")
+
+
+    def stopCheck(self):
+        return self.stop
+
+
+    def close(self):
+        self.lp.LedCtrlString("BYE!", 22, 0, 63, -1, waitms=0)
+
+        self.lp.Reset()  # turn all LEDs off
+        self.lp.Close()  # close the Launchpad (will quit with an error due to a PyGame bug)
+        self.hid0.reset()
+        self.hid1.reset()
+
+
 
 def main():
-	# Start of Program
-	print("\nCurrently this program only works with the Novation Launchpad Mk3 Mini")
-	print("0,0 is defined as the top left of the launchpad whitespace(ONLY THE WHITESPACE IS USED), +y is down and +x is to the right from the top left white space")
-	print("If you want any LED pattern set by default use the compLEDS array to set the colors, otherwise do it with the associated Java library")
-	print("Stop button will be the on the top-most button row, and to the right, should be just left of the corner")
-	print("PLEASE MAKE SURE YOUR VJOY CONFIG IS CORRECT")
-	print("It needs to be 2 vJoy devices, with no enabled Axes, no Force Feedback, 0 POVs, and 32 buttons")
-	print("Please confirm that vJoy device 1 is on driverstation usb order 1, and same with 2")
-	print("Make sure this is run on the same computer as the driver station for NT and HID reasons")
-	print("PLEASE USE THE ASSOCIATED JAVA CLASS FOR INTERACTION\n")
-	while True:
-		try:
-			teamnumber = int(input("Please enter your team number: "))
-			break
-		except:
-			print("Not a valid teamnumber, please input again\n")
+    launchPad = LaunchpadMini3Controller("launchpad")
 
-	launchpadType = "mk3"
-	print()
-	mode = None
+    # General Loop for buttons and colors
+    while True:
+        time.wait(1)
+        launchPad.updateButtonStates()
+        launchPad.updateHidStates()
+        launchPad.updateLeds()
+        if launchPad.stopCheck():
+            break
 
-	#Launch the launchpad and connect to vJoy
-	if launchpadType == "mk3":
-		if launchpad.LaunchpadMiniMk3().Check( 1 ):
-			lp = launchpad.LaunchpadMiniMk3()
-			if lp.Open( 1, "minimk3" ):
-				print("Launchpad Mini Mk3")
-				mode = "launched"
-		else:
-			print("Did not find any Launchpads, meh...")
-			input()
-			return
-	print("")
-	j1 = vjoy.VJoyDevice(1)
-	j2 = vjoy.VJoyDevice(2)
-
-	#Beginning LEDs
-	lp.LedAllOn(5)
-
-	lp.LedCtrlString( f"FRC-{teamnumber}", 63, 0, 63, -1, waitms = 0 )
-
-	lp.LedAllOn(0)
-
-	#NT setup
-	inst = ntcore.NetworkTableInstance.getDefault()
-	buttons = []
-	for i in range(8):
-		buttons.append([])
-		for j in range(8):
-			buttons[i].append(inst.getTable("launchpad").getSubTable(str(i)).getIntegerArrayTopic(str(j)).subscribe([0,0,0]))
-	inst.startClient4("launchpad")
-	inst.setServerTeam(8114)
-	inst.startDSClient()
-
-	#General Loop for buttons and colors
-	while True:
-		time.wait(1)
-
-		if inst.isConnected():
-			for i in buttons:
-				for j in i:
-					for k in j.readQueue():
-						setled(j, i+1, k[0], k[1], k[2], lp)
-
-		inputs = []
-		got = lp.ButtonStateXY()
-		
-		if got == []:
-			continue
-
-		while got != []:
-			inputs.append(got)
-			got = lp.ButtonStateXY()
-
-		for button in inputs:
-			if button == [7,0,127]:
-				break
-			elif button[0] <= 7 and button[1] > 0:
-				if button[1] < 5:
-					j1.set_button((1+button[0]+(button[1]-1)*7), button[2] != 0)
-				else:
-					j2.set_button((1+button[0]+(button[1]-5)*7), button[2] != 0)
-
-	# now quit...
-	print("Quitting !\n\n")
-
-	lp.LedCtrlString( "BYE!", 22, 0, 63, -1, waitms = 0 )
-
-	lp.Reset() # turn all LEDs off
-	lp.Close() # close the Launchpad (will quit with an error due to a PyGame bug)
-	j1.reset()
-	j2.reset()
-
-def setled(x,y,red,green,blue,lp1):
-	lp1.LedCtrlXY(x,y,red,green,blue)
+    launchPad.close()
 
 if __name__ == '__main__':
-	main()
+    main()

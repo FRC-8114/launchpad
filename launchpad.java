@@ -3,6 +3,8 @@ package frc.robot;
 import edu.wpi.first.networktables.NetworkTable;
 import edu.wpi.first.networktables.NetworkTableInstance;
 import edu.wpi.first.networktables.NetworkTableValue;
+import edu.wpi.first.wpilibj.util.Color8Bit;
+import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandGenericHID;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 
@@ -23,24 +25,29 @@ public class launchpad {
         {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}}
     };
     private Trigger[][] buttons = new Trigger[8][8];
+    private Color8Bit pressedColor;
 
     private NetworkTableInstance table;
     private NetworkTable launch;
 
-    public launchpad() {
+    public launchpad(int vjoy1, int vjoy2, Color8Bit pressedColor) {
         table = NetworkTableInstance.getDefault();
         launch = table.getTable("launchpad");
+        int[] vjoyPorts = new int[]{vjoy1, vjoy2};
+        this.pressedColor = pressedColor;
         defaultLEDs();
         for (int i=0; i < 2; i++) {
-            hidController = new CommandGenericHID(i+1);
+            CommandGenericHID hidController = new CommandGenericHID(vjoyPorts[i]);
             for (int j=0; j < 4; j++) {
                 for (int k=0; k < 7; k++) {
+                    int finalJ = j, finalI = i, finalK = k;
                     buttons[j+i*4][k] = hidController.button((k+1)+(j*8));
+                    buttons[j+i*4][k].whileTrue(Commands.runOnce(() -> changeLED(finalJ + finalI * 4, finalK, this.pressedColor)));
+                    buttons[j+i*4][k].onFalse(Commands.runOnce(() -> changeLED(finalJ + finalI * 4, finalK, this.rgbTable[finalJ + finalI * 4][finalK])));
                 }
             }
         }
     }
-
 
     /**
      * Gets the trigger connected to a button
@@ -78,6 +85,31 @@ public class launchpad {
             }
         }
         launch.getSubTable(Integer.toString(y)).putValue(Integer.toString(x), NetworkTableValue.makeIntegerArray(rgb));
+    }
+
+    /**
+     * Changes the color of a button's LED
+     *
+     * @param x x Position of the launchpad, where +x is to the right, starting at the top left (0-7)
+     * @param y y Position of the launchpad, where +y is down, starting at the top left (0-7)
+     * @param rgb the Color8Bit object that describes the color of the button
+     * @throws IllegalArgumentException if x or y is not within 0-7
+     */
+    public void changeLED(int x, int y, Color8Bit color8Bit) {
+        if (x > 7 || y > 7 || x < 0 || y < 0) {
+            throw new IllegalArgumentException("Coords must be within 0-7");
+        }
+        launch.getSubTable(Integer.toString(y)).putValue(Integer.toString(x), NetworkTableValue.makeIntegerArray(convertColor8Bit(color8Bit)));
+    }
+
+    /** 
+     * Converts Color8Bit to proper long[3] array
+     * 
+     * @param color Color8Bit to convert
+     * @return long[3] for the rgb value
+     */
+    public long[] convertColor8Bit(Color8Bit color) {
+        return new long[]{(color.red/4), (color.green/4), (color.blue/4)};
     }
 
     /**
