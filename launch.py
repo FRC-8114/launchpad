@@ -24,8 +24,8 @@ class LaunchpadMini3Controller:
         self.printWarning()
 
         if launchpad.LaunchpadMiniMk3().Check(1):
-            lp = launchpad.LaunchpadMiniMk3()
-            if lp.Open(1, "minimk3"):
+            self.lp = launchpad.LaunchpadMiniMk3()
+            if self.lp.Open(1, "minimk3"):
                 self.startupLeds()
 
                 while True:
