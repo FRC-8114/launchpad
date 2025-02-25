@@ -49,7 +49,7 @@ class LaunchpadMini3Controller:
         self.networkTables = ntcore.NetworkTableInstance.getDefault()
         self.networkTables.startClient4("launchpad")
         self.networkTables.setServerTeam(self.teamnumber)
-        self.networkTables.setServer("localhost") # Sim only
+        # self.networkTables.setServer("localhost") # Sim only
         self.networkTables.startDSClient()
         self.launchpadTable = self.networkTables.getTable(launchpadNTKey)
         self.buttons = {row: {column: self.launchpadTable.getSubTable(str(row))
