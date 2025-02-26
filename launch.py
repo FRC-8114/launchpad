@@ -17,7 +17,7 @@ class LaunchpadMini3Controller:
     networkTables: NetworkTableInstance = None
     launchpadTable: ntcore._ntcore.NetworkTable = None
     buttons = None # type: dict[int, dict[int, ntcore._ntcore.IntegerArraySubscriber]]
-    buttonStates: list[list[bool | 8] | 8] = [([False] for i in range(8)) for k in range(8)]
+    buttonStates: list[list[bool]] = [([False] for i in range(8)) for k in range(8)]
     stop: bool = False
 
     def __init__(self, ntTable: str):
