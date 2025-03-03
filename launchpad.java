@@ -51,7 +51,7 @@ public class Launchpad {
 
             buttons[row][col] = vjoys[vjoy_num].button(button_num % 32);
             buttons[row][col].onTrue(Commands.print("("+row+","+col+") pressed"));
-            buttons[row][col].onFalse(Commands.runOnce((()->this.changeLED(col,row, new Color8Bit()))));
+            buttons[row][col].onFalse(Commands.runOnce((()->this.changeLED(col,row, rgbTable[col][row]))));
             buttons[row][col].onTrue(Commands.runOnce((()->this.changeLED(col,row, pressedColor))));
         }
     }
