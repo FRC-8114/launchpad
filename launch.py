@@ -1,4 +1,5 @@
 import math
+import threading
 import time
 import ntcore
 import launchpad_py as launchpad
@@ -13,11 +14,12 @@ class LaunchpadMini3Controller:
     lp: LaunchpadMiniMk3 = None
     hid0: VJoyDevice = None
     hid1: VJoyDevice = None
+    hid2: VJoyDevice = None
     teamnumber: int = None
     networkTables: NetworkTableInstance = None
     launchpadTable: ntcore._ntcore.NetworkTable = None
-    buttons = None # type: dict[int, dict[int, ntcore._ntcore.IntegerArraySubscriber]]
-    buttonStates: list[list[bool]] = [([False] for i in range(8)) for k in range(8)]
+    buttons: list[ntcore._ntcore.IntegerArraySubscriber] = None
+    buttonStates: list[bool] = [False]*(9*9)
     stop: bool = False
 
     def __init__(self, ntTable: str):
@@ -35,54 +37,78 @@ class LaunchpadMini3Controller:
                     except:
                         print("Not a valid teamnumber, please input again\n")
 
-                hid0 = vjoy.VJoyDevice(1)
-                hid1 = vjoy.VJoyDevice(2)
+                self.hid0 = vjoy.VJoyDevice(1)
+                self.hid1 = vjoy.VJoyDevice(2)
+                self.hid2 = vjoy.VJoyDevice(3)
 
                 print("Launchpad Mini Mk3")
 
                 self.setupNetworkTableClient(ntTable)
+
+                # Start LED update thread
+                self.led_thread = threading.Thread(target=self.led_update_loop, daemon=True)
+                self.led_thread.start()
         else:
             raise Exception("Launchpad Attached is not an Mk3 or is not connected.")
+
+
+    def get_button_num(self, row: int, col: int) -> int:
+        button_num = 0
+        if row == 0:
+            button_num = col
+        else:
+            button_num = row * 9 + col
+        return button_num
 
 
     def setupNetworkTableClient(self, launchpadNTKey: str):
         self.networkTables = ntcore.NetworkTableInstance.getDefault()
         self.networkTables.startClient4("launchpad")
-        self.networkTables.setServerTeam(self.teamnumber)
-        # self.networkTables.setServer("localhost") # Sim only
+        # self.networkTables.setServerTeam(self.teamnumber)
+        self.networkTables.setServer("localhost") # Sim only
         self.networkTables.startDSClient()
         self.launchpadTable = self.networkTables.getTable(launchpadNTKey)
-        self.buttons = {row: {column: self.launchpadTable.getSubTable(str(row))
-                              .getIntegerArrayTopic(str(column))
-                              .subscribe([0, 0, 0]) for column in range(0,8)} for row in range(0,8)}
+        self.buttons = [self.launchpadTable.getIntegerArrayTopic(str(i)).subscribe([0,0,0]) for i in range(0,9*9+1)]
+
 
 
     def updateLeds(self):
         if self.networkTables.isConnected():
-            for i, v in self.buttons.items():
-                for j, l in v.items():
-                    for k in l.readQueue():
-                        self.setLed(i, j, k.value[0], k.value[1], k.value[2])
+            for button_num in range(len(self.buttons)):
+                row = button_num // 9
+                col = button_num % 9 - 1
+                row -= 1 if col == -1 else 0
+                col = 8 if col == -1 else col
+                k = self.buttons[button_num].get()
+                # if k != [0,0,0]:
+                #     print(f"Setting color of ({row},{col})")
+                if len(k) == 3:
+                    self.setLed(col, row, k[0], k[1], k[2])
 
 
     def updateButtonStates(self):
         XYState = self.lp.ButtonStateXY()
-        while XYState != []:
-            if XYState[2] > 0:
-                print(f"({XYState[0]},{XYState[1]-1}) is {"pressed" if [XYState[2]] != 0 else "not pressed"}.")
-                self.buttonStates[XYState[0]][XYState[1]-1] = (XYState[2] != 0)
-                XYState = self.lp.ButtonStateXY()
-            elif XYState[1] == 7 and XYState[2] == 0:
+        if XYState:
+            row = XYState[1]
+            column = XYState[0]
+            # print(f"({row},{column}) is {"pressed" if [XYState[2]] != 0 else "not pressed"}.")
+            # print(XYState)
+            # if XYState[2] != 0:
+            #     print(f'({row},{column})')
+            self.buttonStates[self.get_button_num(row,column)] = (XYState[2] != 0)
+            if XYState[1] == 7 and XYState[2] == 0:
                 self.stop = True
 
 
     def updateHidStates(self):
-        for row in range(self.buttonStates):
-            for col in range(row):
-                if row < 4:
-                    self.hid0.set_button((1+col+row*7), self.buttonStates[row][col])
-                else:
-                    self.hid1.set_button((1+col+(row-4)*7), self.buttonStates[row][col])
+        for button_num in range(len(self.buttonStates)):
+            button = self.buttonStates[button_num]
+            if button_num < 32:
+                self.hid0.set_button(button_num+1, button)
+            elif button_num < 64:
+                self.hid1.set_button(button_num+1-32, button)
+            else:
+                self.hid2.set_button(button_num+1-64, button)
 
 
     def startupLeds(self):
@@ -92,7 +118,7 @@ class LaunchpadMini3Controller:
 
 
     def setLed(self, x, y, red, green, blue):
-        self.lp.LedCtrlXY(x, y+1, red, green, blue)
+        self.lp.LedCtrlXY(x, y, red, green, blue)
 
 
     def printWarning(self):
@@ -103,7 +129,7 @@ class LaunchpadMini3Controller:
             "If you want any LED pattern set by default do it with the associated Java library")
         print("Stop button will be the on the top-most button row, and to the right, should be just left of the corner")
         print("PLEASE MAKE SURE YOUR VJOY CONFIG IS CORRECT")
-        print("It needs to be 2 vJoy devices, with no enabled Axes, no Force Feedback, 0 POVs, and 32 buttons")
+        print("It needs to be 3 vJoy devices, with no enabled Axes, no Force Feedback, 0 POVs, and 32 buttons on each device")
         print("Please confirm that vJoy device 1 is on driverstation usb order 1, and same with 2")
         print("Make sure this is run on the same computer as the driver station for NT and HID reasons")
         print("PLEASE USE THE ASSOCIATED JAVA CLASS FOR INTERACTION\n")
@@ -112,12 +138,20 @@ class LaunchpadMini3Controller:
     def stopCheck(self):
         return self.stop
 
+    def led_update_loop(self):
+        """Runs updateLeds in a loop asynchronously."""
+        while not self.stop:
+            self.updateLeds()
+            time.wait(10)  # Small delay to prevent excessive CPU usage
 
     def close(self):
+        """Stops the LED thread and cleans up resources."""
+        self.stop = True  # Signal thread to stop
+        if self.led_thread.is_alive():
+            self.led_thread.join()  # Wait for the thread to finish
         self.lp.LedCtrlString("BYE!", 22, 0, 63, -1, waitms=0)
-
         self.lp.Reset()  # turn all LEDs off
-        self.lp.Close()  # close the Launchpad (will quit with an error due to a PyGame bug)
+        self.lp.Close()  # close the Launchpad
         self.hid0.reset()
         self.hid1.reset()
 
@@ -126,14 +160,16 @@ class LaunchpadMini3Controller:
 def main():
     launchPad = LaunchpadMini3Controller("launchpad")
 
+
+
     # General Loop for buttons and colors
     while True:
         time.wait(1)
         launchPad.updateButtonStates()
         launchPad.updateHidStates()
-        launchPad.updateLeds()
-        if launchPad.stopCheck():
-            break
+        # if launchPad.stopCheck():
+        #     break
+        # print("looop")
 
     launchPad.close()
 

@@ -1,51 +1,58 @@
-package frc.robot;
+package controllers;
 
-import edu.wpi.first.networktables.NetworkTable;
-import edu.wpi.first.networktables.NetworkTableInstance;
-import edu.wpi.first.networktables.NetworkTableValue;
+import edu.wpi.first.networktables.*;
 import edu.wpi.first.wpilibj.util.Color8Bit;
 import edu.wpi.first.wpilibj2.command.Commands;
 import edu.wpi.first.wpilibj2.command.button.CommandGenericHID;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
 
-public class launchpad {
+public class Launchpad {
 
     //numbers must be within 0-63
     //[63,0,0] - Red || [0,63,0] - Green || [0,0,63] - Blue  || [63,63,63] - White || [0,0,0] - Blank/Black
     //This will update the LEDs once the python attaches to NT
     //This table is visually accurate to the launchpad each of these rbg sets will change it's respective button
     public long[][][] rgbTable = {
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
-        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}}
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
+        {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}}
     };
-    private Trigger[][] buttons = new Trigger[8][8];
+    private IntegerArrayPublisher[] rgbTablePublisher = new IntegerArrayPublisher[9*9+1];
+    private Trigger[][] buttons = new Trigger[9][9];
     private Color8Bit pressedColor;
 
     private NetworkTableInstance table;
     private NetworkTable launch;
+    private CommandGenericHID[] vjoys;
 
-    public launchpad(int vjoy1, int vjoy2, Color8Bit pressedColor) {
+    public Launchpad(int vjoy1, int vjoy2, int vjoy3, Color8Bit pressedColor) {
         table = NetworkTableInstance.getDefault();
         launch = table.getTable("launchpad");
-        int[] vjoyPorts = new int[]{vjoy1, vjoy2};
+
         this.pressedColor = pressedColor;
         defaultLEDs();
-        for (int i=0; i < 2; i++) {
-            CommandGenericHID hidController = new CommandGenericHID(vjoyPorts[i]);
-            for (int j=0; j < 4; j++) {
-                for (int k=0; k < 7; k++) {
-                    int finalJ = j, finalI = i, finalK = k;
-                    buttons[j+i*4][k] = hidController.button((k+1)+(j*8));
-                    buttons[j+i*4][k].whileTrue(Commands.runOnce(() -> changeLED(finalJ + finalI * 4, finalK, this.pressedColor)));
-                    buttons[j+i*4][k].onFalse(Commands.runOnce(() -> changeLED(finalJ + finalI * 4, finalK, this.rgbTable[finalJ + finalI * 4][finalK])));
-                }
+        vjoys = new CommandGenericHID[]{new CommandGenericHID(vjoy1), new CommandGenericHID(vjoy2), new CommandGenericHID(vjoy3)};
+        for (int i = 0; i < 9*9; i++) {
+            int vjoy_num = Math.floorDiv(i,32);
+            int row = Math.floorDiv(i,9);
+            int col = i%9;
+            int button_num = row*9+col;
+            if(row > 0) {
+                button_num += 1;
             }
+
+            rgbTablePublisher[button_num] = launch.getIntegerArrayTopic(String.valueOf(button_num)).publish();
+
+            buttons[row][col] = vjoys[vjoy_num].button(button_num % 32);
+            buttons[row][col].onTrue(Commands.print("("+row+","+col+") pressed"));
+            buttons[row][col].onFalse(Commands.runOnce((()->this.changeLED(col,row, new Color8Bit()))));
+            buttons[row][col].onTrue(Commands.runOnce((()->this.changeLED(col,row, pressedColor))));
         }
     }
 
@@ -73,8 +80,8 @@ public class launchpad {
      * @throws IllegalArgumentException if x or y is not within 0-7, or if array is invalid.
      */
     public void changeLED(int x, int y, long[] rgb) {
-        if (x > 7 || y > 7 || x < 0 || y < 0) {
-            throw new IllegalArgumentException("Coords must be within 0-7");
+        if (x > 8 || y > 8 || x < 0 || y < 0) {
+            throw new IllegalArgumentException("Coords must be within 0-8");
         }
         if (rgb.length != 3) {
             throw new IllegalArgumentException("Array length must be 3");
@@ -84,7 +91,13 @@ public class launchpad {
                 throw new IllegalArgumentException(i + " is an invalid rgb input, must be within 0-63");
             }
         }
-        launch.getSubTable(Integer.toString(y)).putValue(Integer.toString(x), NetworkTableValue.makeIntegerArray(rgb));
+        int button_num = y*9+x;
+        if(y > 0) {
+            button_num += 1;
+        }
+        System.out.println("Setting LED "+button_num+" color.");
+
+        rgbTablePublisher[button_num].set(rgb);
     }
 
     /**
@@ -92,14 +105,19 @@ public class launchpad {
      *
      * @param x x Position of the launchpad, where +x is to the right, starting at the top left (0-7)
      * @param y y Position of the launchpad, where +y is down, starting at the top left (0-7)
-     * @param rgb the Color8Bit object that describes the color of the button
+     * @param color8Bit the Color8Bit object that describes the color of the button
      * @throws IllegalArgumentException if x or y is not within 0-7
      */
     public void changeLED(int x, int y, Color8Bit color8Bit) {
-        if (x > 7 || y > 7 || x < 0 || y < 0) {
+        if (x > 8 || y > 8 || x < 0 || y < 0) {
             throw new IllegalArgumentException("Coords must be within 0-7");
         }
-        launch.getSubTable(Integer.toString(y)).putValue(Integer.toString(x), NetworkTableValue.makeIntegerArray(convertColor8Bit(color8Bit)));
+        int button_num = y*9+x;
+        if(y > 0) {
+            button_num += 1;
+        }
+        System.out.println("Setting LED "+button_num+" color.");
+        rgbTablePublisher[button_num].set(convertColor8Bit(color8Bit));
     }
 
     /** 
@@ -117,11 +135,11 @@ public class launchpad {
      * @throws IllegalArgumentException if anything in the rgbTable array is invalid
      */
     public void defaultLEDs() {
-        if (rgbTable.length != 8) {
+        if (rgbTable.length != 9) {
             throw new IllegalArgumentException(rgbTable.length + " is an invalid rgbTable length");
         }
         for (int i=0; i < rgbTable.length; i++) {
-            if (rgbTable[i].length != 8) {
+            if (rgbTable[i].length != 9) {
                 throw new IllegalArgumentException(rgbTable[i].length + " is an invalid rgbTable length");
             }
             for (int j=0; j < rgbTable[i].length; j++) {
