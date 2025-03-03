@@ -18,7 +18,7 @@ class LaunchpadMini3Controller:
     teamnumber: int = None
     networkTables: NetworkTableInstance = None
     launchpadTable: ntcore._ntcore.NetworkTable = None
-    buttons: list[ntcore._ntcore.IntegerArraySubscriber] = None
+    buttons: ntcore._ntcore.IntegerArraySubscriber = None
     buttonStates: list[bool] = [False]*(9*9)
     stop: bool = False
 
@@ -68,22 +68,27 @@ class LaunchpadMini3Controller:
         self.networkTables.setServer("localhost") # Sim only
         self.networkTables.startDSClient()
         self.launchpadTable = self.networkTables.getTable(launchpadNTKey)
-        self.buttons = [self.launchpadTable.getIntegerArrayTopic(str(i)).subscribe([0,0,0]) for i in range(0,9*9+1)]
+        self.buttons = self.launchpadTable.getIntegerArrayTopic("colors").subscribe([0]*(9*9+1))
 
 
 
     def updateLeds(self):
         if self.networkTables.isConnected():
-            for button_num in range(len(self.buttons)):
+            for button_num in range(9*9+1):
                 row = button_num // 9
                 col = button_num % 9 - 1
                 row -= 1 if col == -1 else 0
                 col = 8 if col == -1 else col
-                k = self.buttons[button_num].get()
-                # if k != [0,0,0]:
-                #     print(f"Setting color of ({row},{col})")
-                if len(k) == 3:
-                    self.setLed(col, row, k[0], k[1], k[2])
+                rgbarr = self.buttons.get()
+                if rgbarr != 0:
+                    rgbhex = rgbarr[button_num]
+                    # if k != [0,0,0]:
+                    #     print(f"Setting color of ({row},{col})")
+                    # Extract red, green, and blue components using bitwise operations
+                    red = (rgbhex >> 16) & 0xFF  # Shift right by 16 bits, mask with 0xFF
+                    green = (rgbhex >> 8) & 0xFF  # Shift right by 8 bits, mask with 0xFF
+                    blue = rgbhex & 0xFF  # Mask with 0xFF to get last 8 bits
+                    self.setLed(col, row, red, green, blue)
 
 
     def updateButtonStates(self):

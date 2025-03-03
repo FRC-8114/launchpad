@@ -23,7 +23,8 @@ public class Launchpad {
         {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}},
         {{0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}, {0,0,0}}
     };
-    private IntegerArrayPublisher[] rgbTablePublisher = new IntegerArrayPublisher[9*9+1];
+    private IntegerArrayPublisher rgbTablePublisher;
+    private long[] rgbHex = new long[9*9+1];
     private Trigger[][] buttons = new Trigger[9][9];
     private Color8Bit pressedColor;
 
@@ -34,7 +35,7 @@ public class Launchpad {
     public Launchpad(int vjoy1, int vjoy2, int vjoy3, Color8Bit pressedColor) {
         table = NetworkTableInstance.getDefault();
         launch = table.getTable("launchpad");
-
+        rgbTablePublisher = launch.getIntegerArrayTopic("colors").publish();
         this.pressedColor = pressedColor;
         defaultLEDs();
         vjoys = new CommandGenericHID[]{new CommandGenericHID(vjoy1), new CommandGenericHID(vjoy2), new CommandGenericHID(vjoy3)};
@@ -47,7 +48,6 @@ public class Launchpad {
                 button_num += 1;
             }
 
-            rgbTablePublisher[button_num] = launch.getIntegerArrayTopic(String.valueOf(button_num)).publish();
 
             buttons[row][col] = vjoys[vjoy_num].button(button_num % 32);
             buttons[row][col].onTrue(Commands.print("("+row+","+col+") pressed"));
@@ -95,9 +95,11 @@ public class Launchpad {
         if(y > 0) {
             button_num += 1;
         }
-        System.out.println("Setting LED "+button_num+" color.");
+//        System.out.println("Setting LED "+button_num+" color.");
 
-        rgbTablePublisher[button_num].set(rgb);
+        long rgbHeax = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+        rgbHex[button_num] = (int) rgbHeax;
+        rgbTablePublisher.set(rgbHex);
     }
 
     /**
@@ -116,8 +118,12 @@ public class Launchpad {
         if(y > 0) {
             button_num += 1;
         }
-        System.out.println("Setting LED "+button_num+" color.");
-        rgbTablePublisher[button_num].set(convertColor8Bit(color8Bit));
+//        System.out.println("Setting LED "+button_num+" color.");
+
+        long[] rgb = convertColor8Bit(color8Bit);
+        long rgbHeax = (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+        rgbHex[button_num] = (int) rgbHeax;
+        rgbTablePublisher.set(rgbHex);
     }
 
     /** 
