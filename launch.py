@@ -21,6 +21,7 @@ class LaunchpadMini3Controller:
     buttons: ntcore._ntcore.IntegerArraySubscriber = None
     buttonStates: list[bool] = [False]*(9*9)
     stop: bool = False
+    led_thread: threading.Thread = None
 
     def __init__(self, ntTable: str):
         self.printWarning()
@@ -44,13 +45,15 @@ class LaunchpadMini3Controller:
                 print("Launchpad Mini Mk3")
 
                 self.setupNetworkTableClient(ntTable)
+                self.startLEDThread()
 
-                # Start LED update thread
-                self.led_thread = threading.Thread(target=self.led_update_loop, daemon=True)
-                self.led_thread.start()
         else:
             raise Exception("Launchpad Attached is not an Mk3 or is not connected.")
 
+    def startLEDThread(self):
+        # Start LED update thread
+        self.led_thread = threading.Thread(target=self.led_update_loop, daemon=True)
+        self.led_thread.start()
 
     def get_button_num(self, row: int, col: int) -> int:
         button_num = 0
@@ -68,19 +71,33 @@ class LaunchpadMini3Controller:
         self.networkTables.setServer("localhost") # Sim only
         self.networkTables.startDSClient()
         self.launchpadTable = self.networkTables.getTable(launchpadNTKey)
-        self.buttons = self.launchpadTable.getIntegerArrayTopic("colors").subscribe([0]*(9*9+1))
+        self.buttons = self.launchpadTable.getIntegerArrayTopic("colors").subscribe([0]*41)
 
+    def extend_array(self, shrunk_array: list[int], original_size: int) -> list[int]:
+        # Create an array of the original size to hold the extended result
+        extended_array = [0] * original_size
 
+        # Iterate through each element of the shrunk array and split the combined value
+        for i in range(len(shrunk_array)):
+            combined_value = shrunk_array[i]
+
+            # Extract the lower 4 bytes and the upper 4 bytes from the combined value
+            extended_array[i * 2] = combined_value & 0xFFFFFFFF  # Lower 4 bytes
+            if i * 2 + 1 < original_size:
+                extended_array[i * 2 + 1] = (combined_value >> 32) & 0xFFFFFFFF  # Upper 4 bytes
+
+        return extended_array
 
     def updateLeds(self):
         if self.networkTables.isConnected():
-            for button_num in range(9*9+1):
-                row = button_num // 9
-                col = button_num % 9 - 1
-                row -= 1 if col == -1 else 0
-                col = 8 if col == -1 else col
-                rgbarr = self.buttons.get()
-                if rgbarr != 0:
+            rgbarr = self.buttons.get()
+            if rgbarr != 0:
+                rgbarr = self.extend_array(rgbarr, 9*9+1)
+                for button_num in range(9*9+1):
+                    row = button_num // 9
+                    col = button_num % 9 - 1
+                    row -= 1 if col == -1 else 0
+                    col = 8 if col == -1 else col
                     rgbhex = rgbarr[button_num]
                     # if k != [0,0,0]:
                     #     print(f"Setting color of ({row},{col})")
@@ -145,7 +162,7 @@ class LaunchpadMini3Controller:
 
     def led_update_loop(self):
         """Runs updateLeds in a loop asynchronously."""
-        while not self.stop:
+        while True:
             self.updateLeds()
             time.wait(10)  # Small delay to prevent excessive CPU usage
 
