@@ -1,4 +1,4 @@
-package controllers;
+package frc.robot;
 
 import edu.wpi.first.networktables.*;
 import edu.wpi.first.wpilibj.util.Color;
@@ -43,7 +43,7 @@ public class Launchpad {
         defaultLEDs();
         vjoys = new CommandGenericHID[]{new CommandGenericHID(vjoy1), new CommandGenericHID(vjoy2), new CommandGenericHID(vjoy3)};
         for (int i = 0; i < 9*9; i++) {
-            int vjoy_num = Math.floorDiv(i,32);
+            int vjoy_num = Math.floorDiv(i+1,32);
             int row = Math.floorDiv(i,9);
             int col = i%9;
             int button_num = getButtonNum(col,row);
@@ -51,13 +51,16 @@ public class Launchpad {
             //     System.out.println("("+row+","+col+","+vjoy_num+") "+button_num);
 
             // Change me!
-            changeLED(col, row, rgbTable[col][row]);
+            changeLED(col, row, rgbTable[row][col]);
 
             int button = button_num - (32 * Math.floorDiv(i,32));
-            buttons[row][col] = vjoys[vjoy_num].button(button);
-            buttons[row][col].onTrue(Commands.print("("+row+","+col+") pressed"));
+            // if(button != 0)
+            // {
+            buttons[row][col] = vjoys[vjoy_num].button(button+1);
+            buttons[row][col].onTrue(Commands.print("("+row+","+(col)+") pressed"));
             buttons[row][col].onFalse(Commands.runOnce((()->this.restoreSavedLED(col,row))));
             buttons[row][col].onTrue(Commands.runOnce((()->this.feedback(col,row, pressedColor))));
+            // }
         }
     }
 
@@ -70,7 +73,7 @@ public class Launchpad {
      * @throws IllegalArgumentException if x or y is not within 0-7
      */
     public Trigger getButton(int x, int y) {
-        if (x > 7 || y > 7 || x < 0 || y < 0) {
+        if (x > 8 || y > 8 || x < 0 || y < 0) {
             throw new IllegalArgumentException("Coords must be less than 7");
         }
         return buttons[y][x];
@@ -103,9 +106,9 @@ public class Launchpad {
     private int getButtonNum(int x, int y)
     {
         int button_num = y*9+x;
-        if(y > 0) {
-            button_num += 1;
-        }
+        // if(y > 0) {
+        //     button_num += 1;
+        // }
         return button_num;
     }
     /**
